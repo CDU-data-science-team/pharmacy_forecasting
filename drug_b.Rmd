@@ -1,5 +1,5 @@
 ---
-title: "Drug A"
+title: "Drug B"
 author: "Chris Beeley"
 date: "`r format(Sys.time(), '%d %B, %Y')`"
 output: pdf_document
@@ -24,7 +24,7 @@ load("pharmacy.rda")
 # summarise by week- keep this
 
 drug <- pharmacy %>% 
-  filter(NSVCode == "Drug A") %>% 
+  filter(NSVCode == "Drug B") %>% 
   mutate(Date = floor_date(Date, "week"),
          Date = yearweek(Date)) %>% 
   group_by(Date) %>% 
@@ -101,11 +101,11 @@ augment(fit_ets) %>%
 
 ```
 
-Residuals show autocorrelation (p<.05)
+Residuals show no autocorrelation (p>.05)
 
 ## ARIMA
 
-```{r}
+```{r, cache = TRUE}
 
 drug_train <- drug %>% 
   head(-10)
@@ -113,7 +113,8 @@ drug_train <- drug %>%
 drug_model <- drug_train %>% 
   model(MEAN(quantity),
         SNAIVE(quantity), 
-        ARIMA(quantity)) %>% 
+        ARIMA(quantity),
+        ETS(quantity)) %>% 
   forecast(h = 10)
 
 drug_model %>% 
@@ -132,6 +133,8 @@ gg_tsresiduals(arima_drug, lag_max = 16)
 
 ```
 
+The model returned is ARIMA(1,0,1)(1,0,0). It may be that this model is more complicated than we need.
+
 Ljung Box test for autocorrelation of residuals
 
 ```{r}
@@ -147,7 +150,7 @@ No autocorrelation of residuals (p>.05)
 
 Forecast accuracy
 
-```{r}
+```{r, cache = TRUE}
 
 drug_model %>% 
   accuracy(drug) %>% 

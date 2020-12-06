@@ -1,0 +1,306 @@
+---
+title: "phaRmacy"
+author: "Chris Beeley"
+date: '`r format(Sys.time(), "%d %B, %Y")`'
+output: html_document
+---
+
+```{r, include=FALSE}
+
+drug <- pharmacy %>% 
+  filter(NSVCode == drug_code) %>% 
+  filter(Site1 == x) %>%
+  filter(Total_Qty >= 0) %>% 
+  group_by(Date) %>%
+  summarise(quantity = sum(Total_Qty, na.rm = TRUE)) %>% 
+  ungroup() %>%  
+  tsibble(index = Date) %>% 
+  fill_gaps(quantity = 0)
+
+drug_week <- pharmacy %>% 
+  filter(NSVCode == drug_code) %>% 
+  filter(Site1 == x) %>%
+  filter(Total_Qty >= 0) %>% 
+  mutate(Date = floor_date(Date, "week"),
+         Date = yearweek(Date)) %>%
+  group_by(Date) %>%
+  summarise(quantity = sum(Total_Qty, na.rm = TRUE)) %>% 
+  ungroup() %>% 
+  head(-1) %>% # remove the last row in case it isn't a complete week
+  tsibble(index = Date) %>% 
+  fill_gaps(quantity = 0)
+
+# horizon for prediction 6 weeks
+
+h <- 6
+
+```
+
+#### `r x`
+
+##### Seasonality
+
+###### Week
+
+```{r}
+
+drug %>% 
+  gg_subseries(period = "week")
+
+```
+
+###### Year
+
+```{r, fig.height=10}
+
+drug_year <- drug %>% 
+  mutate(year = year(Date))
+
+year(drug_year$Date) = 2020
+
+drug_year %>% 
+  ggplot(aes(x = Date, y = quantity)) + 
+  geom_line() +
+  facet_wrap(~ year, ncol = 1)
+
+drug_week %>% 
+  gg_season(quantity, "year")
+
+```
+
+###### Raw data
+
+```{r}
+
+drug %>%
+  model(STL(quantity ~ trend(window = 11) + season(c("1 week", "1 year")),
+            robust = TRUE)) %>%
+  components() %>%
+  autoplot() + 
+  ggtitle("Raw data STL decomposition")
+
+```
+
+###### Detail of data
+
+```{r}
+
+drug %>%
+  model(STL(quantity ~ trend(window = 11) + season(c("1 week", "1 year")),
+            robust = TRUE)) %>%
+  components() %>%
+  tail(365 * 2) %>% 
+  autoplot() + 
+  ggtitle("Raw data STL decomposition")
+
+```
+
+###### Weekly totals
+
+```{r}
+
+drug_week %>%
+  model(STL(quantity ~ trend(window = 11) + season("1 year"),
+            robust = TRUE)) %>%
+  components() %>%
+  autoplot() + 
+  ggtitle("Weekly totals STL decomposition")
+
+```
+
+###### Detail of weekly totals
+
+```{r}
+
+drug_week %>%
+  model(STL(quantity ~ trend(window = 11) + season(c("1 week", "1 year")),
+            robust = TRUE)) %>%
+  components() %>%
+  tail(52 * 2) %>% 
+  autoplot() + 
+  ggtitle("Weekly totals STL decomposition")
+
+```
+
+##### Residuals of STL model- raw data and weekly totals
+
+```{r}
+
+# compare residuals
+
+bind_rows(
+  drug %>%
+    model(STL(quantity ~ trend(window = 11) + season(c("1 week", "1 year")),
+              robust = TRUE)) %>%
+    components() %>% 
+    as_tibble() %>% 
+    mutate(model = "raw") %>% 
+    select(model, remainder),
+  
+  drug_week %>%
+    model(STL(quantity ~ trend(window = 11) + season(c("1 week", "1 year")),
+              robust = TRUE)) %>%
+    components() %>% 
+    as_tibble() %>% 
+    mutate(model = "weekly") %>% 
+    select(model, remainder)
+) %>% 
+  ggplot(aes(x = remainder)) + geom_histogram() + 
+  facet_wrap(~ model, scales = "free")
+
+```
+
+##### Simple exponential smoothing
+
+```{r}
+
+fit_ets <- drug_week %>% 
+  model(ETS(quantity ~ season(method = "N")))
+
+fit_ets %>% 
+  sw_tidy() %>% 
+  kable()
+
+fit_ets %>% 
+  gg_tsresiduals(lag_max = 16)
+
+```
+
+Ljung Box test for autocorrelation of residuals
+
+```{r}
+
+augment(fit_ets) %>%
+  features(.resid, ljung_box, lag = 16, dof = 6) %>% 
+  kable()
+
+```
+
+##### ARIMA
+
+```{r}
+
+arima_drug <- drug_week %>% 
+  model(ARIMA(quantity))
+
+arima_drug %>% 
+  sw_tidy() %>% 
+  kable()
+
+gg_tsresiduals(arima_drug, lag_max = 16)
+
+arima_drug %>% 
+  augment() %>% 
+  autoplot(.resid)
+
+```
+
+Ljung Box test for autocorrelation of residuals
+
+```{r}
+
+arima_drug %>%
+  augment() %>% 
+  features(.resid, ljung_box, lag = 16, dof = 6) %>% 
+  kable()
+
+```
+
+##### Model testing
+
+###### Weekly data
+
+```{r}
+
+drug_train <- drug_week %>% 
+  head(-h)
+
+drug_model <- drug_train %>% 
+  model(SNAIVE(quantity), 
+        ARIMA(quantity),
+        ETS(quantity ~ season(method = "N")),
+        prophet(quantity)) %>% 
+  forecast(h = h)
+
+drug_model %>% 
+  autoplot(drug_week %>% tail(h), level = NULL)
+
+drug_model %>% 
+  accuracy(drug_week) %>% 
+  mutate(across(where(is.numeric), signif, 5)) %>%
+  select(-ACF1) %>%
+  kable()
+
+```
+
+###### Daily data
+
+```{r}
+
+drug_train <- drug %>% 
+  head(-42)
+
+drug_model_day <- drug_train %>% 
+  model(SNAIVE(quantity), 
+        ARIMA(quantity),
+        ETS(quantity ~ season(method = "N")),
+        prophet(quantity)) %>% 
+  forecast(h = 42)
+
+drug_model_day %>% 
+  autoplot(drug %>% tail(42), level = NULL)
+
+drug_model_day %>% 
+  accuracy(drug) %>% 
+  mutate(across(where(is.numeric), signif, 5)) %>%
+  select(-ACF1) %>%
+  kable()
+
+```
+
+##### Cross validation
+
+Cross validated accuracy for a variety of models using weekly data.
+
+```{r}
+
+drug_week_cv <- drug_week %>%
+  slice(1 : (n() - 1)) %>%
+  stretch_tsibble(.init = 10, .step = 10)
+
+cv_model <- drug_week_cv %>%
+  model(ETS(quantity ~ season(method = "N")),
+        SNAIVE(quantity), 
+        ARIMA(quantity),
+        prophet(quantity)) %>% 
+  forecast(h = 1)
+
+cv_model %>% 
+  accuracy(drug_week) %>% 
+  kable()
+  
+
+```
+
+###### Cross validation- daily
+
+Cross validated accuracy for a variety of models using daily data.
+
+```{r}
+
+drug_day_cv <- drug %>%
+  slice(1 : (n() - 1)) %>%
+  stretch_tsibble(.init = 10, .step = 200)
+
+cv_model_day <- drug_day_cv %>%
+  model(ETS(quantity ~ season('N')),
+        SNAIVE(quantity), 
+        ARIMA(quantity),
+        prophet(quantity)) %>% 
+  forecast(h = 1)
+
+cv_model_day %>% 
+  accuracy(drug) %>% 
+  kable()
+
+```

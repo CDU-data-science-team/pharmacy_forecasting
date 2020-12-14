@@ -4,6 +4,10 @@ Inventory management of medicines within hospital pharmacies could be improved b
 
 This repository contains early work forecasting issues of drugs within the Trust (as well as an open dataset). As the project progresses there will be material relating to stock control as well as a Shiny interface to the forecasting and stock control methods.
 
+You can see the output files at the following links:
+
+-   [main.Rmd](https://cdu-data-science-team.github.io/pharmacy_forecasting/main.html)
+
 This project is part of the [Health Foundation's](https://www.health.org.uk/) Advancing Applied Analytics programme. The Health Foundation is an independent charity committed to bringing about better health and health care for people in the UK.
 
 [![Heatlh Foundation logo](logo-HF.png "Health Foundation")](https://www.health.org.uk/)

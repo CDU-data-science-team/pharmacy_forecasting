@@ -1,0 +1,183 @@
+---
+title: "Summary of Drug A"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+library(tidyverse)
+library(lubridate)
+library(fable)
+library(tibbletime)
+library(feasts)
+library(tsibble)
+library(sweep)
+library(knitr)
+library(fable.prophet)
+library(pander)
+library(fasster)
+
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = TRUE, results = "asis")
+
+load("pharmacy.rda")
+
+# forecast horizon
+
+h <- 42
+
+```
+
+## Summary of numbers
+
+```{r}
+
+pharmacy %>% 
+  filter(NSVCode == "Drug A") %>% 
+  filter(Total_Qty >= 0) %>% 
+  group_by(Site1) %>%
+  summarise(quantity = sum(Total_Qty, na.rm = TRUE)) %>% 
+  ungroup() %>% 
+  mutate(daily_average = quantity / as.numeric((max(pharmacy$Date) - min(pharmacy$Date)))) %>% 
+  pandoc.table()
+
+```
+
+## Predict Site C
+
+```{r}
+
+site_c <- pharmacy %>% 
+  filter(NSVCode == "Drug A") %>% 
+  filter(Site1 == "Site C") %>%
+  filter(Total_Qty >= 0) %>% 
+  group_by(Date) %>%
+  summarise(quantity = sum(Total_Qty, na.rm = TRUE)) %>% 
+  ungroup() %>%  
+  tsibble(index = Date) %>% 
+  fill_gaps(quantity = 0)
+
+train_c <- site_c %>% 
+  head(-h)
+
+model_c <- train_c %>% 
+  model(SNAIVE(quantity ~ lag("week")), 
+        ARIMA(quantity),
+        ETS(quantity ~ season(method = "A")),
+        prophet(quantity ~ season(7)),
+        FASSTER(quantity ~ trend(1) + fourier(7))) %>% 
+  forecast(h = h)
+
+model_c %>% 
+  bind_rows(site_c %>% 
+              tail(h) %>% 
+              rename(.mean = quantity) %>% 
+              mutate(.model = "Actual")) %>% 
+  ggplot(aes(x = Date, y = .mean, 
+             group = .model, colour = .model)) + 
+  geom_line() + facet_wrap( ~ .model)
+
+# model_c %>% 
+#   autoplot(site_c %>% tail(h), level = NULL)
+
+model_c %>% 
+  accuracy(site_c) %>% 
+  mutate(across(where(is.numeric), signif, 5)) %>%
+  select(-ACF1) %>%
+  kable()
+
+```
+
+## Cross validation
+
+```{r}
+
+site_c_cv <- site_c %>%
+  slice(1 : (n() - 1)) %>%
+  stretch_tsibble(.init = 200, .step = 200)
+
+cv_model <- site_c_cv %>%
+  model(SNAIVE(quantity ~ lag("week")), 
+        ARIMA(quantity),
+        ETS(quantity ~ season(method = "A")),
+        prophet(quantity ~ season(7)),
+        FASSTER(quantity ~ trend(1) + fourier(7))) %>% 
+  forecast(h = h)
+
+cv_model %>% 
+  accuracy(site_c) %>% 
+  kable()
+
+```
+
+Cross validation results are considerably better, indicating that the most recent results, presumably by chance, conform less to the model.
+
+ETS are the best models, each giving around 300 mean average error compared with a daily average of 471.
+
+## Predict Site B
+
+```{r}
+
+site_b <- pharmacy %>% 
+  filter(NSVCode == "Drug A") %>% 
+  filter(Site1 == "Site B") %>%
+  filter(Total_Qty >= 0) %>% 
+  group_by(Date) %>%
+  summarise(quantity = sum(Total_Qty, na.rm = TRUE)) %>% 
+  ungroup() %>%  
+  tsibble(index = Date) %>% 
+  fill_gaps(quantity = 0)
+
+train_b <- site_b %>% 
+  head(-h)
+
+model_b <- train_b %>% 
+  model(SNAIVE(quantity ~ lag("week")), 
+        ARIMA(quantity),
+        ETS(quantity ~ season(method = "A")),
+        prophet(quantity ~ season(7)),
+        FASSTER(quantity ~ trend(1) + fourier(7))) %>% 
+  forecast(h = h)
+
+model_b %>% 
+  bind_rows(site_b %>% 
+              tail(h) %>% 
+              rename(.mean = quantity) %>% 
+              mutate(.model = "Actual")) %>% 
+  ggplot(aes(x = Date, y = .mean, 
+             group = .model, colour = .model)) + 
+  geom_line() + facet_wrap( ~ .model)
+
+# model_b %>% 
+#   autoplot(site_b %>% tail(h), level = NULL, facet = .model)
+
+model_b %>% 
+  accuracy(site_b) %>% 
+  mutate(across(where(is.numeric), signif, 5)) %>%
+  select(-ACF1) %>%
+  kable()
+
+```
+
+## Cross validation
+
+```{r}
+
+site_b_cv <- site_b %>%
+  slice(1 : (n() - 1)) %>%
+  stretch_tsibble(.init = 200, .step = 200)
+
+cv_model_b <- site_b_cv %>%
+  model(SNAIVE(quantity ~ lag("week")), 
+        ARIMA(quantity),
+        ETS(quantity ~ season(method = "A")),
+        prophet(quantity ~ season(7)),
+        FASSTER(quantity ~ trend(1) + fourier(7))) %>% 
+  forecast(h = h)
+
+cv_model_b %>% 
+  accuracy(site_c) %>% 
+  kable()
+
+```
+
+Results are poor for site B, with the lowest mean average error (357 for prophet) higher than the daily average for this site (289).

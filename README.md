@@ -6,7 +6,8 @@ This repository contains early work forecasting issues of drugs within the Trust
 
 You can see the output files at the following links:
 
--   [main.Rmd](https://cdu-data-science-team.github.io/pharmacy_forecasting/main.html)
+- [main.Rmd](https://cdu-data-science-team.github.io/pharmacy_forecasting/main.html)
+- [summary_drug_a.Rmd](https://cdu-data-science-team.github.io/pharmacy_forecasting/summary_drug_a.html)
 
 This project is part of the [Health Foundation's](https://www.health.org.uk/) Advancing Applied Analytics programme. The Health Foundation is an independent charity committed to bringing about better health and health care for people in the UK.
 

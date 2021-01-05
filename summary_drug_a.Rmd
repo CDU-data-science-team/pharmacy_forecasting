@@ -92,26 +92,32 @@ model_c %>%
 ```{r}
 
 site_c_cv <- site_c %>%
-  slice(1 : (n() - 1)) %>%
-  stretch_tsibble(.init = 200, .step = 200)
+  slice(1 : (n() - 42)) %>%
+  slide_tsibble(.size = 1000, .step = 200)
 
 cv_model <- site_c_cv %>%
   model(SNAIVE(quantity ~ lag("week")), 
         ARIMA(quantity),
         ETS(quantity ~ season(method = "A")),
-        prophet(quantity ~ season(7)),
-        FASSTER(quantity ~ trend(1) + fourier(7))) %>% 
+        prophet(quantity ~ season(7)),  
+        FASSTER(quantity ~ trend(1) + fourier(7))) %>%
   forecast(h = h)
 
-cv_model %>% 
-  accuracy(site_c) %>% 
-  kable()
+cv_accuracy <- cv_model %>% 
+  group_by(.model, .id) %>% 
+  ungroup() %>% 
+  accuracy(site_c)
+
+cv_accuracy %>% 
+  arrange(.model) %>% 
+  select(.model, RMSE, MAE, ACF1) %>% 
+  pandoc.table()
 
 ```
 
 Cross validation results are considerably better, indicating that the most recent results, presumably by chance, conform less to the model.
 
-ETS are the best models, each giving around 300 mean average error compared with a daily average of 471.
+ETS is the best model, giving around 330 mean average error compared with a daily average dispensed drug of 471.
 
 ## Predict Site B
 
@@ -180,4 +186,4 @@ cv_model_b %>%
 
 ```
 
-Results are poor for site B, with the lowest mean average error (357 for prophet) higher than the daily average for this site (289).
+Results are poor for site B, with the lowest mean average error (around 360 for prophet) higher than the daily average for this site (289).

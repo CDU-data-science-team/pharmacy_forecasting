@@ -113,7 +113,7 @@ drug_week %>%
 ```{r}
 
 drug_week %>%
-  model(STL(quantity ~ trend(window = 11) + season(c("1 week", "1 year")),
+  model(STL(quantity ~ trend(window = 11) + season(c("1 year")),
             robust = TRUE)) %>%
   components() %>%
   tail(52 * 2) %>% 
@@ -138,7 +138,7 @@ bind_rows(
     select(model, remainder),
   
   drug_week %>%
-    model(STL(quantity ~ trend(window = 11) + season(c("1 week", "1 year")),
+    model(STL(quantity ~ trend(window = 11) + season(c("1 year")),
               robust = TRUE)) %>%
     components() %>% 
     as_tibble() %>% 
@@ -219,7 +219,8 @@ drug_model <- drug_train %>%
   model(SNAIVE(quantity), 
         ARIMA(quantity),
         ETS(quantity ~ season(method = "N")),
-        prophet(quantity)) %>% 
+        prophet(quantity),
+        FASSTER(quantity ~ trend(1))) %>%
   forecast(h = h)
 
 drug_model %>% 
@@ -241,10 +242,11 @@ drug_train <- drug %>%
   head(-42)
 
 drug_model_day <- drug_train %>% 
-  model(SNAIVE(quantity), 
+  model(SNAIVE(quantity ~ lag("week")), 
         ARIMA(quantity),
-        ETS(quantity ~ season(method = "N")),
-        prophet(quantity)) %>% 
+        ETS(quantity ~ season(method = "A")),
+        prophet(quantity ~ season(7)),
+        FASSTER(quantity ~ trend(1) + fourier(7))) %>%
   forecast(h = 42)
 
 drug_model_day %>% 
@@ -265,20 +267,20 @@ Cross validated accuracy for a variety of models using weekly data.
 ```{r}
 
 drug_week_cv <- drug_week %>%
-  slice(1 : (n() - 1)) %>%
-  stretch_tsibble(.init = 10, .step = 10)
+  slice(1 : (n() - h)) %>%
+  slide_tsibble(.size = 250, .step = 10)
 
 cv_model <- drug_week_cv %>%
-  model(ETS(quantity ~ season(method = "N")),
-        SNAIVE(quantity), 
+  model(SNAIVE(quantity), 
         ARIMA(quantity),
-        prophet(quantity)) %>% 
-  forecast(h = 1)
+        ETS(quantity ~ season(method = "N")),
+        prophet(quantity),
+        FASSTER(quantity ~ trend(1))) %>%
+  forecast(h = h)
 
 cv_model %>% 
   accuracy(drug_week) %>% 
   kable()
-  
 
 ```
 
@@ -289,15 +291,16 @@ Cross validated accuracy for a variety of models using daily data.
 ```{r}
 
 drug_day_cv <- drug %>%
-  slice(1 : (n() - 1)) %>%
-  stretch_tsibble(.init = 10, .step = 200)
+  slice(1 : (n() - 42)) %>%
+  slide_tsibble(.size = 2200, .step = 100)
 
 cv_model_day <- drug_day_cv %>%
-  model(ETS(quantity ~ season('N')),
-        SNAIVE(quantity), 
+  model(SNAIVE(quantity ~ lag("week")), 
         ARIMA(quantity),
-        prophet(quantity)) %>% 
-  forecast(h = 1)
+        ETS(quantity ~ season(method = "A")),
+        prophet(quantity ~ season(7)),
+        FASSTER(quantity ~ trend(1) + fourier(7))) %>%
+  forecast(h = 42)
 
 cv_model_day %>% 
   accuracy(drug) %>% 

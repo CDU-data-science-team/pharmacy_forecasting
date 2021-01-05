@@ -16,6 +16,7 @@ library(sweep)
 library(knitr)
 library(fable.prophet)
 library(pander)
+library(fasster)
 
 knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = TRUE, results = "asis")
 
@@ -43,19 +44,7 @@ cat(unlist(res), sep = '\n')
 
 ### Drug B
 
-```{r}
-
-drug_code <- "Drug B"
-
-res <- sapply(c("Site A", "Site B", "Site C"), function(x) {
-  knitr::knit_child(
-    'child.Rmd', envir = environment(), quiet = TRUE
-  )
-})
-
-cat(unlist(res), sep = '\n')
-
-```
+Drug B is excluded from this analysis because there is only 3 years of data for Drug B. It may be included at a later date.
 
 ### Drug C
 

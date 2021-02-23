@@ -1,0 +1,124 @@
+---
+title: "Forecast variance example"
+author: "Chris Beeley"
+date: "23/02/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+library(tidyverse)
+library(lubridate)
+library(fable)
+library(tibbletime)
+library(feasts)
+library(tsibble)
+library(sweep)
+library(knitr)
+library(fable.prophet)
+library(pander)
+library(fasster)
+
+knitr::opts_chunk$set(echo = TRUE)
+
+load("pharmacy.rda")
+
+h <- 42
+
+site_c <- pharmacy %>% 
+  filter(NSVCode == "Drug A") %>% 
+  filter(Site1 == "Site C") %>%
+  filter(Total_Qty >= 0) %>% 
+  group_by(Date) %>%
+  summarise(quantity = sum(Total_Qty, na.rm = TRUE)) %>% 
+  ungroup() %>%  
+  tsibble(index = Date) %>% 
+  fill_gaps(quantity = 0)
+
+```
+
+## Summary of model
+
+```{r}
+
+train_c <- site_c %>% 
+  head(-h)
+
+# fit model
+
+fit <- train_c %>%
+  model(ETS(quantity))
+
+# parameters
+
+report(fit)
+
+```
+
+## Plot
+
+```{r}
+
+fit %>% 
+  forecast(h = h) %>% 
+  autoplot(site_c %>% head(-h) %>% tail(42))
+
+```
+
+## Plot components
+
+```{r}
+
+components(fit) %>%
+  tail(100) %>% 
+  autoplot()
+
+```
+
+## Forecast standard deviation
+
+(see [https://otexts.com/fpp3/ets-forecasting.html](https://otexts.com/fpp3/ets-forecasting.html))
+
+For an A, N, A model:
+
+where $\sigma_{h}$ is the residual variance, m is the seasonal period, and k is the integer part of $\frac{h−1}{m}$ (i.e., the number of complete years in the forecast period prior to time T + h)
+
+$$\sigma^2_{h} = \sigma^2(1 + \alpha^2(h -1) + \gamma k(2\alpha + \gamma))$$
+
+```{r}
+
+alpha_fit <- fit %>% 
+  coef() %>% 
+  filter(term == "alpha") %>% 
+  pull(estimate)
+
+gamma_fit <- fit %>% 
+  coef() %>% 
+  filter(term == "gamma") %>% 
+  pull(estimate)
+
+sd_fit <- fit %>% 
+  augment() %>% 
+  as_tibble() %>% 
+  summarise(sd = mean(quantity, na.rm = TRUE)) %>% 
+  pull(sd)
+
+sd_h <- sd_fit * (1 + (alpha_fit^2 * (h -1)) + 
+                    gamma_fit * 6 * (2 * alpha_fit + gamma_fit))
+
+```
+
+Standard deviation of the forecast is `r sd_h`.
+
+## Produce actual levels of the forecast
+
+```{r}
+
+fit_forecast <- fit %>% 
+  forecast(h = h) %>% 
+  as_tibble() %>% 
+  select(Date, .mean)
+
+save(fit_forecast, file = "ets_forecast.rda")
+
+```

@@ -268,7 +268,8 @@ sd_h &lt;- sd_fit * (1 + (alpha_fit^2 * (h -1)) +
 <pre class="r"><code>fit_forecast &lt;- fit %&gt;% 
   forecast(h = h) %&gt;% 
   as_tibble() %&gt;% 
-  select(Date, .mean)
+  mutate(cumulative = cumsum(.mean)) %&gt;% 
+  select(Date, value = .mean, cumulative) 
 
 save(fit_forecast, file = &quot;ets_forecast.rda&quot;)</code></pre>
 </div>

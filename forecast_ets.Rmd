@@ -117,7 +117,8 @@ Standard deviation of the forecast is `r sd_h`.
 fit_forecast <- fit %>% 
   forecast(h = h) %>% 
   as_tibble() %>% 
-  select(Date, .mean)
+  mutate(cumulative = cumsum(.mean)) %>% 
+  select(Date, value = .mean, cumulative) 
 
 save(fit_forecast, file = "ets_forecast.rda")
 

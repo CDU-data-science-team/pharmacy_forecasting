@@ -97,18 +97,18 @@ gamma_fit <- fit %>%
   filter(term == "gamma") %>% 
   pull(estimate)
 
-sd_fit <- fit %>% 
+var_resid <- fit %>% 
   augment() %>% 
   as_tibble() %>% 
-  summarise(sd = mean(quantity, na.rm = TRUE)) %>% 
-  pull(sd)
+  summarise(sd_resid = var(.resid, na.rm = TRUE)) %>% 
+  pull(sd_resid)
 
-sd_h <- sd_fit * (1 + (alpha_fit^2 * (h -1)) + 
-                    gamma_fit * 6 * (2 * alpha_fit + gamma_fit))
+var_resid <- var_resid * (1 + (alpha_fit^2 * (h -1)) + 
+                            gamma_fit * 6 * (2 * alpha_fit + gamma_fit))
 
 ```
 
-Standard deviation of the forecast is `r sd_h`.
+Standard deviation of the forecast is `r var_resid ^ .5`.
 
 ## Produce actual levels of the forecast
 

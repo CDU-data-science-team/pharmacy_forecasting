@@ -253,15 +253,15 @@ gamma_fit &lt;- fit %&gt;%
   filter(term == &quot;gamma&quot;) %&gt;% 
   pull(estimate)
 
-sd_fit &lt;- fit %&gt;% 
+var_resid &lt;- fit %&gt;% 
   augment() %&gt;% 
   as_tibble() %&gt;% 
-  summarise(sd = mean(quantity, na.rm = TRUE)) %&gt;% 
-  pull(sd)
+  summarise(sd_resid = var(.resid, na.rm = TRUE)) %&gt;% 
+  pull(sd_resid)
 
-sd_h &lt;- sd_fit * (1 + (alpha_fit^2 * (h -1)) + 
-                    gamma_fit * 6 * (2 * alpha_fit + gamma_fit))</code></pre>
-<p>Standard deviation of the forecast is 474.9704726.</p>
+var_resid &lt;- var_resid * (1 + (alpha_fit^2 * (h -1)) + 
+                            gamma_fit * 6 * (2 * alpha_fit + gamma_fit))</code></pre>
+<p>Standard deviation of the forecast is 494.8775828.</p>
 </div>
 <div id="produce-actual-levels-of-the-forecast" class="section level2">
 <h2>Produce actual levels of the forecast</h2>
